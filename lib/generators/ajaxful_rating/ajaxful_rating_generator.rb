@@ -1,7 +1,7 @@
 require 'rails/generators/migration'
 class AjaxfulRatingGenerator < Rails::Generators::NamedBase
   include Rails::Generators::Migration
-  
+
   def self.source_root
     @_axr_root ||= File.expand_path("../templates", __FILE__)
   end
@@ -18,9 +18,9 @@ class AjaxfulRatingGenerator < Rails::Generators::NamedBase
   end
 
   def create_layout
-    copy_file 'images/star.png', 'assets/images/ajaxful_rating/star.png'
-    copy_file 'images/star_small.png', 'assets/images/ajaxful_rating/star_small.png'
-    copy_file 'style.css', 'assets/stylesheets/ajaxful_rating.css.scss'
+    copy_file 'images/star.png', 'public/images/ajaxful_rating/star.png'
+    copy_file 'images/star_small.png', 'public/images/ajaxful_rating/star_small.png'
+    copy_file 'style.css', 'public/stylesheets/ajaxful_rating.css'
   end
 
   private

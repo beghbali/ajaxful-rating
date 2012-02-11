@@ -9,7 +9,74 @@ module AjaxfulRating # :nodoc:
       # stylesheet_link_tag('ajaxful_rating') +
       content_tag(:style, @axr_css.to_css, :type => "text/css")
     end
-    
+
+    def ajaxful_rating_script
+      if protect_against_forgery?
+        authenticity_script = %{
+          csrf_param = "authenticity_token";
+          csrf_token = #{form_authenticity_token.inspect};
+
+          // Always send the authenticity_token with ajax
+          $(document).ajaxSend(function(event, request, settings) {
+            if ( settings.type == 'post' ) {
+              settings.data = (settings.data ? settings.data + "&" : "")
+                + encodeURIComponent( csrf_param ) + "=" + encodeURIComponent( csrf_token );
+            }
+          });
+        }
+      end
+
+      %{<script type='text/javascript'>
+        #{authenticity_script}
+
+
+        $(document).ready(function(){
+          $('li > a[class^=stars-]').each(function(i) {
+            $(this).bind('mouseover', function() {
+              $(this).closest('.ajaxful-rating-wrapper').next('.ajaxful-rating-chosen-wrapper').find('.ajaxful-rating-chosen').text($(this).attr('title'));
+            });
+            $(this).bind('mouseout', function() {
+              var div = $(this).closest('.ajaxful-rating-wrapper');
+              div.next('.ajaxful-rating-chosen-wrapper').find('.ajaxful-rating-chosen').text(div.find('.show-value').attr('title'));
+            });
+            $(this).bind('click', function() {
+              var match = /stars\\-(\\d+)-(\\d+)/.exec($(this).attr('class'));
+              var width = Math.round((parseFloat(match[1])/parseFloat(match[2]))*100);
+              $(this).closest('.ajaxful-rating').find('.show-value').css('width', width.toString() + '%');
+            });
+          });
+          $(".ajaxful-rating a")
+            .bind("ajax:success", function(status, response, xhr) {
+              $('#' + response.id + ' .show-value').css('width', response.width + '%');
+              $('#' + response.id + ' .show-value').attr('title', $('#' + response.id + ' *[class^=stars-' + response.average + ']').attr('title'));
+              $('#' + response.id + ' ~ .ajaxful-rating-chosen-wrapper').find('.ajaxful-rating-chosen').text($('#' + response.id + ' .show-value').attr('title'));
+            });
+        });
+      </script>}
+    end
+
+    def ajaxful_rating_script_prototype
+      %{
+        $$('.ajaxful-rating a').observe('click', rateProduct);
+
+        function rateProduct(event) {
+          var element = event.element();
+
+          new Ajax.Request(element.readAttribute('data-url'), {
+            method: element.readAttribute('data-method'),
+            parameters: {
+              data-stars: element.readAttribute('data-stars'),
+              data-dimension: element.readAttribute('data-dimension'),
+              data-size: element.readAttribute('data-size'),
+              data-show_user_rating: element.readAttribute('data-show_user_rating')
+            },
+            onSuccess: function(transport, json){
+              alert(json ? Object.inspect(json) : "no JSON object");
+            }
+          });
+        }
+      }
+    end
     # Generates the stars list to submit a rate.
     # 
     # It accepts the next options:
@@ -75,7 +142,7 @@ module AjaxfulRating # :nodoc:
     def ratings_for(*args)
       @axr_css ||= CSSBuilder.new
       options = args.extract_options!.to_hash.symbolize_keys.slice(:small, :remote_options,
-        :wrap, :show_user_rating, :dimension, :force_static, :current_user)
+        :wrap, :show_user_rating, :dimension, :force_static, :current_user, :show_chosen, :normalize)
 
       remote_options = options.delete(:remote_options) || {}
       rateable = args.shift

@@ -30,25 +30,40 @@ module AjaxfulRating # :nodoc:
           @axr_config[dimension] ||= {
             :stars => 5,
             :allow_update => true,
-            :cache_column => :rating_average
+            :cache_column => :rating_average,
+            :sum_method => lambda {|rates| rates.sum(:stars)}
           }
         end
-        
+
+        def axr_dimensions(dimensions = nil)
+          @dimensions = dimensions unless dimensions.nil?
+          @dimensions
+        end
         alias_method :ajaxful_rating_options, :axr_config
       end
 
       if options[:dimensions].is_a?(Array)
+        axr_dimensions(options[:dimensions])
+        has_many "all_rates", :dependent => :destroy,
+                 :class_name => 'Rate', :as => :rateable
+        has_many "all_raters", :through => "all_rates", :source => :rater
+
         options[:dimensions].each do |dimension|
           has_many "#{dimension}_rates", :dependent => :destroy,
             :conditions => {:dimension => dimension.to_s}, :class_name => 'Rate', :as => :rateable
           has_many "#{dimension}_raters", :through => "#{dimension}_rates", :source => :rater
 
-          axr_config(dimension).update(options)
-        end 
+          axr_config(dimension).update(options.reject{|k,v| k == :dimension_options})
+        end
       else
-          axr_config.update(options)
+          axr_config.update(options.reject { |k, v| k == :dimension_options })
       end
-      
+
+      if options[:dimension_options].is_a?(Hash)
+        options[:dimension_options].each do |dimension, dimension_options|
+          axr_config(dimension).update(dimension_options)
+        end
+      end
       
       include AjaxfulRating::InstanceMethods
       extend AjaxfulRating::SingletonMethods
@@ -68,6 +83,10 @@ module AjaxfulRating # :nodoc:
       self.class.axr_config(dimension)
     end
 
+    def axr_dimensions(dimensions = nil)
+      self.class.axr_dimensions(dimensions)
+    end
+
     # Submits a new rate. Accepts a hash of tipical Ajax request.
     #
     # Example:
@@ -78,7 +97,7 @@ module AjaxfulRating # :nodoc:
     #     # some page update here ...
     #   end
     def rate(stars, user, dimension = nil)
-      return false if (stars.to_i > self.class.max_stars) || (stars.to_i < 1)
+      return false if (stars.to_i > self.class.max_stars(dimension)) || (stars.to_i < 1)
       raise Errors::AlreadyRatedError if (!self.class.axr_config(dimension)[:allow_update] && rated_by?(user, dimension))
 
       rate = if self.class.axr_config(dimension)[:allow_update] && rated_by?(user, dimension)
@@ -131,6 +150,10 @@ module AjaxfulRating # :nodoc:
       rates(dimension).find_by_rater_id(user.id)
     end
 
+    def rates_by(user, dimension = nil)
+      rates(dimension).find_all_by_rater_id(user.id)
+    end
+
     # Return true if the user has rated the object, otherwise false
     def rated_by?(user, dimension = nil)
       !rate_by(user, dimension).nil?
@@ -150,7 +173,7 @@ module AjaxfulRating # :nodoc:
 
     # Total sum of the rates.
     def rates_sum(dimension = nil)
-      rates(dimension).sum(:stars)
+      self.class.axr_config(dimension)[:sum_method].call(rates(dimension))
     end
 
     # Rating average for the object.
